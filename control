@@ -1,0 +1,9 @@
+Package: com.joshdoctors.lowpowerbanner
+Name: LowPowerBanner
+Depends: mobilesubstrate, firmware (>= 5.0)
+Version: 1.5
+Architecture: iphoneos-arm
+Description: Turns low battery alerts into banners!
+Maintainer: fewjative@gmail.com
+Author: Fewjative
+Section: Tweaks
