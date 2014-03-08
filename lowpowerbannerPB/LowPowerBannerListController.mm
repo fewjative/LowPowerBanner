@@ -109,7 +109,7 @@
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section
 {
 	if (section == 2)
-		return NSLocalizedStringFromTableInBundle(@"By snakeninny & PrimeCode", nil, BUNDLE, @"By snakeninny & PrimeCode");
+		return NSLocalizedStringFromTableInBundle(@"By fewjative & snakeninny & PrimeCode", nil, BUNDLE, @"By fewjative & snakeninny & PrimeCode");
 	return nil;
 }
 
@@ -143,7 +143,7 @@
 				}
 			case 1:
 				{
-					NSString *url = @"mailto:snakeninny@gmail.com?subject=LowPowerBanner";
+					NSString *url = @"mailto:fewjative@gmail.com?subject=LowPowerBanner";
 					url = (NSString *)CFURLCreateStringByAddingPercentEscapes(NULL, (CFStringRef)url, NULL, (CFStringRef)@" ", kCFStringEncodingUTF8);
 					[[UIApplication sharedApplication] openURL:[NSURL URLWithString:url]];
 					[url release];
