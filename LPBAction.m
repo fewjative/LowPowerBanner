@@ -12,6 +12,10 @@
 #define RINGTONE [DOCUMENT stringByAppendingPathComponent:@"/Ringtones"]
 #define ICON [DOCUMENT stringByAppendingPathComponent:@"/Icons"]
 
+#ifndef kCFCoreFoundationVersionNumber_iOS_7_0
+#define kCFCoreFoundationVersionNumber_iOS_7_0 847.20
+#endif
+
 NSString *iconString;
 BOOL shouldReplaceBannerIcon;
 
@@ -68,19 +72,18 @@ BOOL shouldReplaceBannerIcon;
 	if ([titleString length] == 0 && [messageString length] == 0) // Leave Title and Message empty to disable the banner
 		return;
 
-	NSString *version = [[UIDevice currentDevice] systemVersion];
 
-	if(!([version floatValue] >= 7.0))
+	if(!(kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0))
 	{
-		NSLog(@"Should be hooking iOS6 and below");
+		NSLog(@"Hooking iOS6 and below");
 		SBAwayController *awayController = [objc_getClass("SBAwayController") sharedAwayController];
 		if (![awayController isLocked])
 		{
 			BBBulletinRequest *bulletin = [[objc_getClass("BBBulletinRequest") alloc] init];
-			bulletin.sectionID = @"com.naken.lowpowerbanner";
-			bulletin.bulletinID = @"com.naken.lowpowerbanner";
-			bulletin.publisherBulletinID = @"com.naken.lowpowerbanner";
-			bulletin.recordID = @"com.naken.lowpowerbanner";
+			bulletin.sectionID = @"com.joshdoctors.lowpowerbanner";
+			bulletin.bulletinID = @"com.joshdoctors.lowpowerbanner";
+			bulletin.publisherBulletinID = @"com.joshdoctors.lowpowerbanner";
+			bulletin.recordID = @"com.joshdoctors.lowpowerbanner";
 			bulletin.title = titleString;
 			bulletin.message = messageString;
 			bulletin.date = [NSDate date];
