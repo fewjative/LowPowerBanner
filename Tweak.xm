@@ -23,6 +23,11 @@ extern BOOL shouldReplaceBannerIcon;
 static NSInteger lastLevel = -60;
 static NSMutableArray *levelArray = nil;
 static void LoadSettings(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+static void EnableTweak(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+static void DisableTweak(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+static void EnableFix(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+static void DisableFix(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+
 static void (*original_AudioServicesPlaySystemSound)(int inSystemSoundID);
 static void CopySettingsToLibrary();
 
@@ -57,6 +62,30 @@ static void LoadSettings(CFNotificationCenterRef center, void *observer, CFStrin
 	}
 }
 
+static void EnableTweak(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+	enableTweak = YES;
+}
+
+static void DisableTweak(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+	enableTweak = NO;
+	NSLog(@"Tweak disabled");
+}
+
+static void EnableFix(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+	enableFix = YES;
+}
+
+static void DisableFix(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+	enableFix = NO;
+	NSLog(@"Fix disabled");
+}
+
+
+
 static void CopySettingsToLibrary()
 {
 	NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -67,6 +96,20 @@ static void CopySettingsToLibrary()
 		[fileManager copyItemAtPath:[[BUNDLE bundlePath] stringByAppendingPathComponent:@"/lpb.db"] toPath:DATABASE error:nil];
 		[fileManager copyItemAtPath:[[BUNDLE bundlePath] stringByAppendingPathComponent:@"/Ringtones"] toPath:RINGTONE error:nil];
 		[fileManager copyItemAtPath:[[BUNDLE bundlePath] stringByAppendingPathComponent:@"/Icons"] toPath:ICON error:nil];
+	}
+
+	if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0) 
+	{
+		NSMutableDictionary * prefs = [[NSMutableDictionary alloc] initWithContentsOfFile:@"/var/mobile/Library/LowPowerBanner/com.joshdoctors.lowpowerbanner.plist"];
+
+		if(prefs)
+		{
+			enableTweak = ([prefs objectForKey:@"enableTweak"] ? [[prefs objectForKey:@"enableTweak"] boolValue] : enableTweak);
+			enableFix = ([prefs objectForKey:@"enableFix"] ? [[prefs objectForKey:@"enableFix"] boolValue] : enableFix);
+		}
+
+		NSLog(@"enableTweak has value: %d",enableTweak);
+		NSLog(@"enableFix has value: %d",enableFix);
 	}
 
 	LoadSettings(nil, nil, nil, nil, nil);
@@ -241,6 +284,36 @@ static void replaced_AudioServicesPlaySystemSound(int inSystemSoundID)
 
 %group iOS7Hook //start of iOS7 hook
 
+%hook SBAwayBulletinListItem
+
+// Force our custom image
+- (UIImage *)iconImage
+{
+	%log;
+	UIImage * result = %orig;
+
+
+	if (shouldReplaceBannerIcon)
+	{
+		shouldReplaceBannerIcon = NO;
+		UIImage *bannerIconImage = [UIImage imageWithContentsOfFile:[[ICON stringByAppendingPathComponent:[NSString stringWithFormat:@"/%@", iconString]] stringByAppendingPathExtension:@"png"]];
+		if (bannerIconImage == nil)
+			bannerIconImage = [UIImage imageWithContentsOfFile:[[[[BUNDLE bundlePath] stringByAppendingPathComponent:@"/Icons"] stringByAppendingPathComponent:[NSString stringWithFormat:@"/%@", iconString]] stringByAppendingPathExtension:@"png"]];
+		CGSize size = {20.0f, 20.0f};
+		UIGraphicsBeginImageContextWithOptions(size, NO, 2.0f);
+		[bannerIconImage drawInRect:CGRectMake(0, 0, size.width, size.height)];
+		bannerIconImage = UIGraphicsGetImageFromCurrentImageContext();
+		UIGraphicsEndImageContext();
+		NSLog(@"Exiting iconImage for lockscreen");
+		return bannerIconImage;
+	}
+	
+	NSLog(@"Exiting -no  change- iconImage for lockscreen");
+	return result;
+}
+
+%end
+
 %hook SBBulletinBannerItem
 - (id)iconImage
 {
@@ -257,9 +330,11 @@ static void replaced_AudioServicesPlaySystemSound(int inSystemSoundID)
 		[bannerIconImage drawInRect:CGRectMake(0, 0, size.width, size.height)];
 		bannerIconImage = UIGraphicsGetImageFromCurrentImageContext();
 		UIGraphicsEndImageContext();
+		NSLog(@"Exiting iconImage for springboard");
 		return bannerIconImage;
 	}
 
+	NSLog(@"Exiting -no change - iconImage for springboard");
 	return result;
 }
 %end
@@ -271,15 +346,20 @@ static void replaced_AudioServicesPlaySystemSound(int inSystemSoundID)
 	%orig;
 	NSInteger level = (int)[(SBUIController *)[objc_getClass("SBUIController") sharedInstance] curvedBatteryCapacityAsPercentage];
 
-	if ([levelArray indexOfObject:[NSNumber numberWithInt:level]] != NSNotFound)
+	if(enableTweak)
 	{
-		LPBAction *action = [[LPBAction alloc] init];
-		if (lastLevel + 1 == level) // Charging
-			[action actionOfKind:@"up" atBatteryLevel:level];
-		else if (lastLevel - 1 == level) // Draining
-			[action actionOfKind:@"down" atBatteryLevel:level];
-		[action release];			
+		if ([levelArray indexOfObject:[NSNumber numberWithInt:level]] != NSNotFound)
+		{
+			LPBAction *action = [[LPBAction alloc] init];
+			if (lastLevel + 1 == level) // Charging
+				[action actionOfKind:@"up" atBatteryLevel:level fix:enableFix];
+			else if (lastLevel - 1 == level) // Draining
+				[action actionOfKind:@"down" atBatteryLevel:level fix:enableFix];
+			[action release];			
+		}
 	}
+
+	NSLog(@"enableFix = %d",enableFix);
 
 	lastLevel = level;
 }
@@ -289,8 +369,12 @@ static void replaced_AudioServicesPlaySystemSound(int inSystemSoundID)
 %hook SBAlertItemsController
 - (void)activateAlertItem:(id)item
 {
-	if ([item isKindOfClass:[objc_getClass("SBLowPowerAlertItem") class]])
-		return;
+	if(enableTweak)
+	{
+		if ([item isKindOfClass:[objc_getClass("SBLowPowerAlertItem") class]])
+			return;
+		%orig;
+	}else
 	%orig;
 }
 %end
@@ -299,18 +383,20 @@ static void replaced_AudioServicesPlaySystemSound(int inSystemSoundID)
 - (void)ACPowerChanged
 {
 	%orig;
-
-	if ([self isOnAC] && [levelArray indexOfObject:[NSNumber numberWithInt:0]] != NSNotFound)
+	if(enableTweak)
 	{
-		LPBAction *action = [[LPBAction alloc] init];
-		[action actionOfKind:@"up" atBatteryLevel:0];
-		[action release];	
-	}
-	else if (![self isOnAC] && [levelArray indexOfObject:[NSNumber numberWithInt:-1]] != NSNotFound)
-	{
-		LPBAction *action = [[LPBAction alloc] init];
-		[action actionOfKind:@"up" atBatteryLevel:-1];
-		[action release];	
+		if ([self isOnAC] && [levelArray indexOfObject:[NSNumber numberWithInt:0]] != NSNotFound)
+		{
+			LPBAction *action = [[LPBAction alloc] init];
+			[action actionOfKind:@"up" atBatteryLevel:0 fix:enableFix];
+			[action release];	
+		}
+		else if (![self isOnAC] && [levelArray indexOfObject:[NSNumber numberWithInt:-1]] != NSNotFound)
+		{
+			LPBAction *action = [[LPBAction alloc] init];
+			[action actionOfKind:@"up" atBatteryLevel:-1 fix:enableFix];
+			[action release];	
+		}
 	}
 }
 %end
@@ -323,6 +409,13 @@ static void replaced_AudioServicesPlaySystemSound(int inSystemSoundID)
 	%init;
 	CopySettingsToLibrary();
 	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, LoadSettings, CFSTR("com.joshdoctors.lowpowerbanner.loadsettings"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+	if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0) 
+	{
+		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, EnableTweak, CFSTR("com.joshdoctors.lowpowerbanner.enabletweak"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, DisableTweak, CFSTR("com.joshdoctors.lowpowerbanner.disabletweak"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, EnableFix, CFSTR("com.joshdoctors.lowpowerbanner.enablefix"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, DisableFix, CFSTR("com.joshdoctors.lowpowerbanner.disablefix"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+	}
 	MSHookFunction((void **)AudioServicesPlaySystemSound, (void **)replaced_AudioServicesPlaySystemSound, (void **)&original_AudioServicesPlaySystemSound);
 
 	//NSString *version = [[UIDevice currentDevice] systemVersion]; - [version floatValue] >= 7.0	
